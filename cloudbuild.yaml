@@ -8,4 +8,4 @@ steps:
 images:
 - 'gcr.io/direct-builder-455310-e3/n8n-cyber-agent-brain:latest'
 options:
-  logging: LEGACY
+  logging: CLOUD_LOGGING_ONLY

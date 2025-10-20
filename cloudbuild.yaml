@@ -1,0 +1,11 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build',
+    '-t', 'gcr.io/direct-builder-455310-e3/n8n-cyber-agent-brain:latest',
+    '.'
+  ]
+images:
+- 'gcr.io/direct-builder-455310-e3/n8n-cyber-agent-brain:latest'
+options:
+  logging: LEGACY

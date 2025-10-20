@@ -1,0 +1,7 @@
+ crewai[tools]
+langchain-openai
+python-dotenv
+Flask
+gunicorn
+google-cloud-secret-manager
+

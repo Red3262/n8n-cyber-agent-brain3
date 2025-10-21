@@ -37,124 +37,152 @@ GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 
 if GCP_PROJECT_ID:
     print("Loading secrets from Google Secret Manager...")
-    # OPENAI_API_KEY removed
-    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed    ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
     VT_API_KEY = access_secret_version("VT_API_KEY", GCP_PROJECT_ID)
-else:
-    print("GCP_PROJECT_ID not set. Loading from environment variables for local testing.")
-    # OPENAI_API_KEY removed
-    ABUSEIPDB_API_KEY = os.environ.get("ABUSEIPDB_API_KEY")
-    VT_API_KEY = os.environ.get("VT_API_KEY")
+import os
+from flask import Flask, request, jsonify
+from crewai import Agent, Task, Crew
+from crewai_tools import SerperDevTool, WebsiteSearchTool
 
-# OPENAI_API_KEY os.environ setting removed
+# Initialize Flask app
+app = Flask(__name__)
 
-# Initialize the Gemini LLM
-# It will automatically use the permissions of the Cloud Run service account
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", # Using Flash for speed and free tier
-                           convert_system_message_to_human=True) # Helps with compatibility
+# --- Environment Variable Setup ---
+# In a real application, these should be set in your Cloud Run service configuration,
+# preferably by linking them from Google Secret Manager.
+os.environ = os.environ.get("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY_HERE")
+os.environ = os.environ.get("SERPER_API_KEY", "YOUR_SERPER_API_KEY_HERE")
 
-# --- Tool Definitions ---
+# --- Initialize Tools ---
+search_tool = SerperDevTool()
+web_search_tool = WebsiteSearchTool()
 
-@tool("AbuseIPDB IP Check")
-def abuseipdb_tool(ip: str) -> str:
-    """Checks an IP address against the AbuseIPDB database for malicious reports.
-    Input must be a single, valid IP address."""
-    if not ABUSEIPDB_API_KEY:
-        return "Error: AbuseIPDB API key is not configured."
+# --- Define CrewAI Agents ---
 
-    url = 'https://api.abuseipdb.com/api/v2/check'
-    querystring = {
-        'ipAddress': ip,
-        'maxAgeInDays': '90'
-    }
-    headers = {
-        'Accept': 'application/json',
-        'Key': ABUSEIPDB_API_KEY
-    }
-    try:
-        response = requests.get(url, headers=headers, params=querystring, timeout=10)
-        response.raise_for_status() # Raise an error for bad status codes
-        # Attempt to return JSON, fall back to text if needed
-        try:
-            return response.json()
-        except requests.exceptions.JSONDecodeError:
-            return f"AbuseIPDB returned non-JSON response: {response.text}"
-    except requests.exceptions.RequestException as e:
-        return f"Error calling AbuseIPDB API: {e}"
-
-@tool("VirusTotal IP/Domain Check")
-def virustotal_tool(indicator: str) -> str:
-    """Checks an IP address or domain against VirusTotal.
-    Input must be a single IP or domain."""
-    if not VT_API_KEY:
-        return "Error: VirusTotal API key is not configured."
-
-    # Basic check for IP vs domain (simplified)
-    # Improved check for IP format
-    is_ip = all(c.isdigit() or c == '.' for c in indicator) and indicator.count('.') == 3
-    if '.' in indicator and '/' not in indicator:
-         resource_type = 'ip_addresses' if is_ip else 'domains'
-    else:
-         return "Error: Please provide just an IP or domain. URL analysis is not supported by this tool."
-
-    url = f"https://www.virustotal.com/api/v3/{resource_type}/{indicator}"
-    headers = {
-        "accept": "application/json",
-        "x-apikey": VT_API_KEY
-    }
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        # Attempt to return JSON, fall back to text if needed
-        try:
-            return response.json()
-        except requests.exceptions.JSONDecodeError:
-            return f"VirusTotal returned non-JSON response: {response.text}"
-    except requests.exceptions.RequestException as e:
-        # Provide more detail on common VT errors
-        if e.response is not None:
-             if e.response.status_code == 404:
-                 return f"Indicator {indicator} not found in VirusTotal."
-             elif e.response.status_code == 401:
-                 return "Error calling VirusTotal API: Invalid API Key."
-             elif e.response.status_code == 429:
-                 return "Error calling VirusTotal API: Rate limit exceeded."
-        return f"Error calling VirusTotal API: {e}"
-
-# --- Agent Definitions ---
-
-# Triage Agent
-triage_agent = Agent(
-    role='Triage Specialist',
-    goal='Parse the initial alert and extract key Indicators of Compromise (IOCs). Identify the primary IOC to investigate.',
-    backstory='You are a meticulous Level 1 SOC analyst. Your job is to read raw alert data and pull out the actionable IP addresses, domains, or hashes. You only identify the IOCs, you do not analyze them.',
-    llm=llm,
-    verbose=True
-)
-
-# Intelligence Agent
-intelligence_agent = Agent(
-    role='Threat Intelligence Gatherer',
-    goal='Collect data on a given IOC from all available threat intelligence feeds.',
-    backstory='You are an expert in using security APIs. You take a single IOC (like an IP or domain) and query tools like AbuseIPDB and VirusTotal to get raw data.',
-    tools=[abuseipdb_tool, virustotal_tool], # Correctly references the tool functions
-    llm=llm,
-    verbose=True,
-    allow_delegation=False # Prevent this agent from trying to delegate tasks
-)
-
-# Analysis Agent
-analysis_agent = Agent(
+# Agent 1: Security Analyst
+security_analyst = Agent(
     role='Senior Security Analyst',
-    goal='Analyze the collected data to determine the threat level and provide a recommendation.',
-    backstory='You are a seasoned Level 3 analyst. You correlate data from multiple sources to paint a clear picture. You determine the risk (Low, Medium, High, or Critical) and advise on the next steps (e.g., "Block", "Monitor", "False Positive").',
-    llm=llm,
+    goal='Investigate security alerts to determine if they represent a real threat',
+    backstory='''You are a seasoned security analyst with expertise in threat intelligence.
+    You use your skills to analyze IP addresses, domain names, and other indicators of compromise
+    to provide a clear assessment of potential threats.''',
+    verbose=True,
+    allow_delegation=False,
+    tools=[search_tool, web_search_tool]
+)
+
+# Agent 2: Report Formatter
+report_formatter = Agent(
+    role='Report Formatter',
+    goal='Format the investigation findings into a structured and clean JSON report',
+    backstory='''You are a meticulous assistant who takes technical findings and organizes
+    them into a clean, easy-to-read JSON format. You focus on clarity and structure,
+    ensuring all key findings are included in the final output.''',
     verbose=True,
     allow_delegation=False
 )
 
-# Reporting Agent
-reporting_agent = Agent(
-    role='SOC Reporting Manager',
-    goal='Create a concise, structured JSON report of the findings for the n8n workflow.',
-    backstory='You are a manager who writes final reports. You must summarize the investigation into a clean
+# --- Define CrewAI Tasks ---
+
+def create_analysis_tasks(ip_address, event_type, source):
+    """Creates the analysis and reporting tasks for the crew."""
+
+    investigation_task = Task(
+        description=f"""
+        Investigate the IP address: {ip_address}.
+        The alert is of type '{event_type}' and originated from '{source}'.
+        1. Use your search tools to find information about this IP address.
+        2. Determine if it is a known malicious actor, a TOR exit node, a VPN, or a regular IP.
+        3. Summarize your findings, including any associated threats, reputation, and geolocation.
+        4. Provide a clear recommendation on whether this IP should be blocked.
+        """,
+        expected_output='A detailed analysis of the IP address, its reputation, associated threats, and a final recommendation.',
+        agent=security_analyst
+    )
+
+    reporting_task = Task(
+        description="""
+        Format the security analyst's investigation findings into a structured JSON report.
+        The JSON should include the following keys:
+        - 'ip_address': The IP that was investigated.
+        - 'is_threat': A boolean value (true or false).
+        - 'threat_level': A string ('low', 'medium', 'high', 'critical').
+        - 'summary': A brief summary of the findings.
+        - 'recommendation': The analyst's recommendation (e.g., 'Block IP', 'Monitor', 'No action needed').
+        - 'raw_findings': The detailed, unformatted findings from the analyst.
+        """,
+        expected_output='A JSON object containing the structured report of the security investigation.',
+        agent=report_formatter,
+        context=[investigation_task]
+    )
+
+    return [investigation_task, reporting_task]
+
+# --- Flask API Endpoints ---
+
+@app.route('/health', methods=)
+def health_check():
+    """A simple health check endpoint."""
+    return '', 204
+
+@app.route('/analyze', methods=)
+def analyze_alert():
+    """
+    Main endpoint to receive alert data and trigger the CrewAI investigation.
+    Expects a JSON body like:
+    {
+        "alert_data": {
+            "ip": "8.8.8.8",
+            "event_type": "SSH Alert",
+            "source": "Manual Test"
+        }
+    }
+    """
+    data = request.get_json()
+
+    if not data or 'alert_data' not in data:
+        return jsonify({"error": "Invalid request body. 'alert_data' key is missing."}), 400
+
+    alert_data = data['alert_data']
+    ip_address = alert_data.get('ip')
+    event_type = alert_data.get('event_type', 'Unknown Event')
+    source = alert_data.get('source', 'Unknown Source')
+
+    if not ip_address:
+        return jsonify({"error": "'ip' not found in alert_data."}), 400
+
+    try:
+        # Create tasks for the crew
+        tasks = create_analysis_tasks(ip_address, event_type, source)
+
+        # Create and run the crew
+        security_crew = Crew(
+            agents=[security_analyst, report_formatter],
+            tasks=tasks,
+            verbose=2
+        )
+
+        result = security_crew.kickoff()
+
+        return jsonify({"analysis_report": result})
+
+    except Exception as e:
+        # Log the full error for debugging in Cloud Run logs
+        print(f"An error occurred during crew execution: {e}")
+        return jsonify({"error": "An internal error occurred during analysis."}), 500
+
+# --- Main Execution Block ---
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, debug=True)

@@ -3,3 +3,5 @@ steps:
   args: [ 'build', '-t', 'us-central1-docker.pkg.dev/cyber-agent-brain-v2-475715/crew-ai-images/n8n-cyber-agent-brain:latest', '.' ]
 images:
 - 'us-central1-docker.pkg.dev/cyber-agent-brain-v2-475715/crew-ai-images/n8n-cyber-agent-brain:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY

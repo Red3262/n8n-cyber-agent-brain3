@@ -27,4 +27,4 @@ ENV VT_API_KEY=""
 # Run the web server
 # Gunicorn is a production-ready server, Flask is the web framework
 # It will run the 'app' object from the 'main.py' file
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "main:app"]
+CMD exec gunicorn --bind 0.0.0.0:$PORT main:app

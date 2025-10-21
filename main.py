@@ -3,8 +3,9 @@ import requests
 from flask import Flask, request, jsonify
 from crewai import Agent, Task, Crew, Process
 from crewai_tools import BaseTool
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI # Corrected import
 from google.cloud import secretmanager
+from dotenv import load_dotenv # Added import for local testing
 
 # --- Configuration & API Key Loading ---
 
@@ -13,7 +14,6 @@ app = Flask(__name__)
 
 # Load environment variables from .env file for local testing (if available)
 # In production (Cloud Run), these will be set in the environment.
-from dotenv import load_dotenv
 load_dotenv()
 
 def access_secret_version(secret_id, project_id, version_id="latest"):
@@ -37,21 +37,21 @@ GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 
 if GCP_PROJECT_ID:
     print("Loading secrets from Google Secret Manager...")
-    OPENAI_API_KEY = access_secret_version("OPENAI_API_KEY", GCP_PROJECT_ID)
+    # OPENAI_API_KEY removed
     ABUSEIPDB_API_KEY = access_secret_version("ABUSEIPDB_API_KEY", GCP_PROJECT_ID)
     VT_API_KEY = access_secret_version("VT_API_KEY", GCP_PROJECT_ID)
 else:
     print("GCP_PROJECT_ID not set. Loading from environment variables for local testing.")
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+    # OPENAI_API_KEY removed
     ABUSEIPDB_API_KEY = os.environ.get("ABUSEIPDB_API_KEY")
     VT_API_KEY = os.environ.get("VT_API_KEY")
 
-# Set the OpenAI API key for LangChain/CrewAI
-os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+# OPENAI_API_KEY os.environ setting removed
 
-# Initialize the LLM
-# Using gpt-4o-mini for a balance of speed, cost, and intelligence
-llm = ChatOpenAI(model="gpt-4o-mini")
+# Initialize the Gemini LLM
+# It will automatically use the permissions of the Cloud Run service account
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", # Using Flash for speed and free tier
+                           convert_system_message_to_human=True) # Helps with compatibility
 
 # --- Tool Definitions ---
 
